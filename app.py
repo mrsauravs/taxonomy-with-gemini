@@ -24,7 +24,7 @@ except Exception:
 
 def scrape_page_content(url):
     """
-    Scrapes the main textual content of a webpage for analysis.
+    Scrapes the main textual content of a webpage for AI analysis.
     Returns the text content or an error string.
     """
     try:
@@ -43,22 +43,40 @@ def scrape_page_content(url):
     except requests.exceptions.RequestException as e:
         return f"Scraping Error: {e}"
 
+def scrape_deployment_tags(url):
+    """
+    Scrapes just the deployment tags from the top of the page.
+    """
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # IMPORTANT: You may need to update this selector to match your site's HTML
+        tags_container = soup.select_one('div.deployment-tags') or soup.select_one('div.topic-tags')
+        if tags_container:
+            tags = [tag.get_text(strip=True) for tag in tags_container.find_all('span')]
+            return ", ".join(tags) if tags else "Tags Not Found"
+        return "Tags Container Missing"
+    except requests.exceptions.RequestException:
+        return "Scraping Error"
+
 def get_ai_analysis(content, user_roles, functional_areas, topics):
     """
     Sends the scraped content to the Gemini API for a full analysis,
-    requesting a structured JSON response.
+    requesting a structured JSON response with stricter rules.
     """
     if not content or "Scraping Error" in content:
         return {"error": content or "No content to analyze"}
 
-    # This comprehensive prompt asks the AI to perform all tasks in one go.
+    # This comprehensive prompt asks the AI to perform all tasks in one go with specific constraints.
     prompt = f"""
     Analyze the following documentation content. Your response MUST be a single, valid JSON object with four keys: "user_roles", "functional_areas", "topics", and "keywords".
 
     1.  **"user_roles"**: A string of the most relevant user roles, chosen ONLY from this list: {user_roles}
-    2.  **"functional_areas"**: A string of the most relevant functional areas, chosen ONLY from this list: {functional_areas}
-    3.  **"topics"**: A string of the most relevant topics, chosen ONLY from this list: {topics}
-    4.  **"keywords"**: A string containing exactly 20 unique, comma-separated, high-value technical keywords from the content. Avoid generic terms like "documentation", "overview", or "introduction".
+    2.  **"functional_areas"**: A string containing ONLY THE SINGLE MOST RELEVANT functional area, chosen ONLY from this list: {functional_areas}
+    3.  **"topics"**: A string containing the top 2 to 4 MOST RELEVANT topics, chosen ONLY from this list: {topics}
+    4.  **"keywords"**: A string containing exactly 20 unique, comma-separated, high-value technical keywords from the content. Avoid generic terms.
 
     **CONTENT TO ANALYZE** (first 8000 characters):
     "{content[:8000]}"
@@ -80,7 +98,7 @@ def get_ai_analysis(content, user_roles, functional_areas, topics):
 st.title("📄 AI-Powered Documentation Tagger & Keyword Generator")
 st.info("Upload your .txt files. The app will scrape each URL and use the Gemini API to generate keywords and map categories.")
 
-# Create columns for a cleaner layout
+# Create columns for a cleaner layout of the file uploaders
 col1, col2 = st.columns(2)
 with col1:
     uploaded_urls = st.file_uploader("1. Upload URLs (.txt)", type="txt")
@@ -108,18 +126,25 @@ if st.button("🚀 Start Analysis", type="primary"):
             progress_text = f"Processing ({i+1}/{len(urls)}): {url}"
             progress_bar.progress((i + 1) / len(urls), text=progress_text)
             
+            # Scrape both the main content for AI analysis and the deployment tags
             content = scrape_page_content(url)
+            deployment_type = scrape_deployment_tags(url) 
+            
+            # Get the full analysis from the Gemini API
             analysis = get_ai_analysis(content, user_roles_list, functional_areas_list, topics_list)
             
-            # Append the results for the current URL to our list
+            # Append all the gathered data to our results list
             results.append({
                 'Page URL': url,
+                'Deployment Type': deployment_type,
                 'Keywords': analysis.get('keywords', analysis.get('error', 'N/A')),
                 'User Role': analysis.get('user_roles', 'N/A'),
                 'Functional Area': analysis.get('functional_areas', 'N/A'),
                 'Topics': analysis.get('topics', 'N/A')
             })
-            time.sleep(1) # Be respectful of API rate limits
+            
+            # Wait for 4 seconds to stay within the free tier's rate limit
+            time.sleep(4) 
 
         progress_bar.empty()
         st.success("✅ Analysis Complete!")
