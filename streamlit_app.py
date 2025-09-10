@@ -226,7 +226,7 @@ if app_mode == "Step 1: Map Deployment Types":
                         time.sleep(1.1)
                     st.session_state.report_df_step1 = df1
                     st.success("✅ AI analysis complete! Table updated.")
-                    st.experimental_rerun()
+                    st.rerun()
         
         csv_data = df1.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Download Report (CSV)", csv_data, "deployment_report_step1.csv", "text/csv")
@@ -375,3 +375,7 @@ elif app_mode == "Step 3: Generate Keywords":
         st.dataframe(st.session_state.report_df_step3)
         csv_data_3 = st.session_state.report_df_step3.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Download Final Report (CSV)", csv_data_3, "final_report_step3.csv", "text/csv")
+
+# --- Footer ---
+st.markdown("---")
+st.markdown("<div style='text-align: center; color: grey;'>© All rights reserved, Saurabh Sugandh</div>", unsafe_allow_html=True)
