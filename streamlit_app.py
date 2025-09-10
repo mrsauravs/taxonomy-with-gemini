@@ -138,24 +138,29 @@ def get_keywords_with_llm(model, soup, page_title):
 st.set_page_config(layout="wide")
 st.title("📄 Intelligent Content Analysis Workflow")
 
-try:
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=GOOGLE_API_KEY)
-except (KeyError, FileNotFoundError):
-    st.error("GOOGLE_API_KEY secret not found. Please add it to your Streamlit Cloud deployment settings.")
-    GOOGLE_API_KEY = None
+st.sidebar.header("Configuration")
+GOOGLE_API_KEY = st.sidebar.text_input("Enter your Google Gemini API Key", type="password")
+
+if GOOGLE_API_KEY:
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel(STABLE_MODEL)
+        st.sidebar.success("API Key configured successfully!")
+    except Exception as e:
+        st.sidebar.error(f"Invalid API Key: {e}")
+        GOOGLE_API_KEY = None
+else:
+    st.sidebar.warning("Please enter your Google Gemini API Key to begin.")
+
 
 app_mode = st.sidebar.radio("Choose a Step", ["Step 1: Map Deployment Types", "Step 2: Map Metadata", "Step 3: Generate Keywords"])
 
-if GOOGLE_API_KEY:
-    model = genai.GenerativeModel(STABLE_MODEL)
 
 if app_mode == "Step 1: Map Deployment Types":
     st.header("Step 1: Map Deployment Types")
     st.markdown("Upload a `.txt` file of URLs. This tool will scrape each URL for its deployment type, using an AI model for pages without clear tags. Download the resulting CSV to use in Step 2.")
     
-    with st.sidebar:
-        urls_file_step1 = st.file_uploader("Upload URLs File (.txt)", type="txt", key="step1_uploader")
+    urls_file_step1 = st.file_uploader("Upload URLs File (.txt)", type="txt", key="step1_uploader")
 
     if st.button("🚀 Map Deployment Types", type="primary", disabled=(not GOOGLE_API_KEY)):
         if urls_file_step1 and GOOGLE_API_KEY:
@@ -170,6 +175,7 @@ if app_mode == "Step 1: Map Deployment Types":
                     results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': dtype})
                 else:
                     results.append({'Page Title': title, 'Page URL': url, 'Deployment Type': 'Fetch Error'})
+                time.sleep(1.1) # Rate limit to avoid overwhelming the API
             
             st.session_state.report_df_step1 = pd.DataFrame(results)
             st.success("✅ Step 1 complete! You can now download the report.")
@@ -184,11 +190,10 @@ elif app_mode == "Step 2: Map Metadata":
     st.header("Step 2: Map Metadata")
     st.markdown("Upload the CSV from Step 1, along with `.txt` files for topics, functional areas, and user roles. The AI will analyze each URL's content to map the most relevant metadata.")
 
-    with st.sidebar:
-        csv_file_step2 = st.file_uploader("Upload Deployment Report (.csv)", type="csv", key="step2_csv_uploader")
-        topics_file = st.file_uploader("Upload Topics File (.txt)", type="txt", key="step2_topics")
-        areas_file = st.file_uploader("Upload Functional Areas File (.txt)", type="txt", key="step2_areas")
-        roles_file = st.file_uploader("Upload User Roles File (.txt)", type="txt", key="step2_roles")
+    csv_file_step2 = st.file_uploader("Upload Deployment Report (.csv)", type="csv", key="step2_csv_uploader")
+    topics_file = st.file_uploader("Upload Topics File (.txt)", type="txt", key="step2_topics")
+    areas_file = st.file_uploader("Upload Functional Areas File (.txt)", type="txt", key="step2_areas")
+    roles_file = st.file_uploader("Upload User Roles File (.txt)", type="txt", key="step2_roles")
 
     if st.button("🚀 Map Metadata", type="primary", disabled=(not GOOGLE_API_KEY)):
         if all([csv_file_step2, topics_file, areas_file, roles_file, GOOGLE_API_KEY]):
@@ -212,11 +217,12 @@ elif app_mode == "Step 2: Map Metadata":
                 else:
                     row['User Role'], row['Functional Area'], row['Topics'] = 'Fetch Error', 'Fetch Error', 'Fetch Error'
                 analysis_results.append(row)
+                time.sleep(1.1) # Rate limit
             
             st.session_state.report_df_step2 = pd.DataFrame(analysis_results)
             st.success("✅ Step 2 complete! You can now download the metadata report.")
         else:
-            st.warning("⚠️ Please upload all required files in the sidebar.")
+            st.warning("⚠️ Please upload all required files.")
 
     if 'report_df_step2' in st.session_state:
         st.subheader("Metadata Report")
@@ -228,8 +234,7 @@ elif app_mode == "Step 3: Generate Keywords":
     st.header("Step 3: Generate Keywords")
     st.markdown("Upload the CSV from Step 2. The AI will analyze each URL's content to generate 20 unique keywords.")
 
-    with st.sidebar:
-        csv_file_step3 = st.file_uploader("Upload Metadata Report (.csv)", type="csv", key="step3_csv_uploader")
+    csv_file_step3 = st.file_uploader("Upload Metadata Report (.csv)", type="csv", key="step3_csv_uploader")
     
     if st.button("🚀 Generate Keywords", type="primary", disabled=(not GOOGLE_API_KEY)):
         if csv_file_step3 and GOOGLE_API_KEY:
@@ -247,7 +252,8 @@ elif app_mode == "Step 3: Generate Keywords":
                 else:
                     row['Keywords'] = 'Fetch Error'
                 analysis_results.append(row)
-
+                time.sleep(1.1) # Rate limit
+            
             st.session_state.report_df_step3 = pd.DataFrame(analysis_results)
             st.success("✅ Step 3 complete! You can now download the final report.")
         else:
@@ -256,5 +262,5 @@ elif app_mode == "Step 3: Generate Keywords":
     if 'report_df_step3' in st.session_state:
         st.subheader("Final Report with Keywords")
         st.dataframe(st.session_state.report_df_step3)
-        csv_data = st.session_state.report_df_step3.to_csv(index=False).encode('utf-g-sig')
+        csv_data = st.session_state.report_df_step3.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Download Final Report (CSV)", csv_data, "final_report_with_keywords.csv", "text/csv")
